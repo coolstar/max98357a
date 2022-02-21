@@ -37,6 +37,28 @@ typedef struct _FAST_GPIO {
 	UINT32 DW0;
 } FAST_GPIO;
 
+typedef __unaligned struct _IntcSSTArg
+{
+	INT32 chipModel;
+	INT32 dword4;
+	INT32 caller;
+	INT32 dwordC; //Size?
+	BYTE deviceInD0;
+	INT32 dword11;
+	GUID guid;
+	BYTE byte25;
+	INT32 dword26;
+	INT32 dword2A;
+	INT32 dword2E;
+	INT32 dword32;
+	INT32 dword36;
+	INT32 dword3A;
+	INT32 dword3E;
+	BYTE byte42;
+	BYTE byte43;
+	char padding[80]; //idk what this is for
+} IntcSSTArg, * PIntcSSTArg;
+
 typedef struct _MAXM_CONTEXT
 {
 
@@ -49,6 +71,15 @@ typedef struct _MAXM_CONTEXT
 	WDFQUEUE ReportQueue;
 
 	GPIO_CONTEXT SdmodeGpioContext;
+
+	BOOLEAN DevicePoweredOn;
+	INT8 IntcSSTStatus;
+
+	WDFWORKITEM IntcSSTWorkItem;
+	PCALLBACK_OBJECT IntcSSTHwMultiCodecCallback;
+	PVOID IntcSSTCallbackObj;
+
+	IntcSSTArg sstArgTemp;
 
 } MAXM_CONTEXT, *PMAXM_CONTEXT;
 

@@ -45,13 +45,338 @@ __in PUNICODE_STRING RegistryPath
 	return status;
 }
 
-NTSTATUS BOOTCODEC(
-	_In_  PMAXM_CONTEXT  pDevice
-	)
+#define SNOOP 0
+
+int IntCSSTArg2 = 1;
+
+VOID
+UpdateIntcSSTStatus(
+	IN PMAXM_CONTEXT pDevice,
+	int sstStatus
+) {
+#if SNOOP
+	DbgPrint("In snoop mode, not calling\n\n");
+#else
+	IntcSSTArg *SSTArg = &pDevice->sstArgTemp;
+	RtlZeroMemory(SSTArg, sizeof(IntcSSTArg));
+
+	if (pDevice->IntcSSTHwMultiCodecCallback) {
+		if (sstStatus != 1 || pDevice->IntcSSTStatus) {
+			SSTArg->chipModel = 98357;
+			SSTArg->caller = 0xc0000165; //gmaxcodec
+			DbgPrint("Set caller to 0x%x\n", SSTArg->caller);
+			if (sstStatus) {
+				if (sstStatus == 1) {
+					if (!pDevice->IntcSSTStatus) {
+						return;
+					}
+					SSTArg->dword4 = 12;
+					SSTArg->dword11 = 2;
+					SSTArg->dwordC = 21;
+				}
+				else {
+					SSTArg->dword4 = 11;
+					SSTArg->dwordC = 20;
+				}
+
+				SSTArg->deviceInD0 = (pDevice->DevicePoweredOn != 0);
+			}
+			else {
+				SSTArg->dword4 = 10;
+				SSTArg->dwordC = 18;
+				SSTArg->deviceInD0 = 1;
+			}
+			ExNotifyCallback(pDevice->IntcSSTHwMultiCodecCallback, SSTArg, &IntCSSTArg2);
+		}
+		else {
+			DbgPrint("Ignoring sstStatus = 1\n");
+		}
+	}
+	else {
+		DbgPrint("No callback yet\n");
+	}
+#endif
+}
+
+VOID
+IntcSSTWorkItemFunc(
+	IN WDFWORKITEM  WorkItem
+)
 {
-	unsigned char gpio_data;
-	gpio_data = 1;
-	return GpioWriteDataSynchronously(&pDevice->SdmodeGpioContext, &gpio_data);
+	WDFDEVICE Device = (WDFDEVICE)WdfWorkItemGetParentObject(WorkItem);
+	PMAXM_CONTEXT pDevice = GetDeviceContext(Device);
+
+	DbgPrint("SST Work Item Func Called!\n");
+
+	UpdateIntcSSTStatus(pDevice, 0);
+}
+
+DEFINE_GUID(GUID_SST_RTK_1,
+	0x963122C9, 0xA000, 0x17B9, 0x11, 0xD0, 0xF7, 0x0F, 0xDF, 0xF2, 0x1C, 0xE2);
+DEFINE_GUID(GUID_SST_RTK_2,
+	0x963122C9, 0xA000, 0x17B9, 0x11, 0xD0, 0xF7, 0x0F, 0xDF, 0xF2, 0x1C, 0xE1); //gmax GUID (2nd in realtek)
+DEFINE_GUID(GUID_SST_RTK_3,
+	0x963122C9, 0xA000, 0x17B9, 0x11, 0xD0, 0xF7, 0x0F, 0xDF, 0xF2, 0x1B, 0xE1);
+DEFINE_GUID(GUID_SST_RTK_4,
+	0x963122C9, 0xA000, 0x17B9, 0x11, 0xD0, 0xF7, 0x0F, 0xDF, 0xF2, 0x1F, 0xE3);
+
+VOID
+IntcSSTCallbackFunction(
+	IN WDFWORKITEM  WorkItem,
+	IntcSSTArg *SSTArgs,
+	PVOID Argument2
+) {
+	if (!WorkItem) {
+		DbgPrint("No Work Item in SSTCallback???\n");
+		return;
+	}
+	WDFDEVICE Device = (WDFDEVICE)WdfWorkItemGetParentObject(WorkItem);
+	PMAXM_CONTEXT pDevice = GetDeviceContext(Device);
+
+	DbgPrint("SST Callback function called!\n");
+
+	if (Argument2 == &IntCSSTArg2) {
+		DbgPrint("Ignoring call from ourself\n");
+		return;
+	}
+
+	//gmaxCodec checks that dwordC is greater than 0x10 first thing
+	if (SSTArgs->dwordC <= 0x10) {
+		DbgPrint("Returning (dwordC is too small): 0x%x\n", SSTArgs->dwordC);
+		return;
+	}
+
+	DbgPrint("ChipModel: %d\n", SSTArgs->chipModel);
+	DbgPrint("Caller: 0x%x\n", SSTArgs->caller);
+	//Intel Caller: 0xc00000a3 (STATUS_DEVICE_NOT_READY)
+	//GMax Caller: 0xc0000165
+
+	if (SSTArgs->chipModel == 98357) {
+		DbgPrint("Should be 98357a callback! Dumping...\n");
+		DbgPrint("dword4, c, 11: %d, 0x%x, 0x%x\n", SSTArgs->dword4, SSTArgs->dwordC, SSTArgs->dword11);
+		DbgPrint("Caller: 0x%x\n", SSTArgs->caller);
+		DbgPrint("byte10, 25: 0x%x 0x%x\n", SSTArgs->deviceInD0, SSTArgs->byte25);
+
+		UNICODE_STRING guidStr;
+		if (NT_SUCCESS(RtlStringFromGUID(&SSTArgs->guid, &guidStr))) {
+			DbgPrint("guid: %ws\n", guidStr.Buffer);
+			RtlFreeUnicodeString(&guidStr);
+		}
+		else {
+			DbgPrint("Unable to get guid\n");
+		}
+
+		/*
+
+		Gmax (no SST driver):
+			init:	dword4 = 10
+					dwordc = 18
+					deviceInD0 = 1
+
+			stop:	dword4 = 11
+					dwordc = 20
+					deviceInD0 = 0
+		*/
+
+		/*
+			
+		Gmax (SST driver)
+			post-init:	dword4 = 12
+						dwordc = 21
+						dword11 = 2
+
+		*/
+
+#if !SNOOP
+		if (Argument2 != &IntCSSTArg2) { //Intel SST is calling us
+			/*SSTArgs->caller = 0; //pull this to 0?
+
+			INT8 newSSTStatus = SSTArgs->deviceInD0 != 0;
+			if (newSSTStatus != pDevice->IntcSSTStatus) {
+				pDevice->IntcSSTStatus = newSSTStatus;
+				UpdateIntcSSTStatus(pDevice, 1);
+			}*/
+
+			bool checkCaller = (SSTArgs->caller != 0);
+
+			if (SSTArgs->dword4 == 11) {
+				if (SSTArgs->dwordC >= 0x15) {
+					if (SSTArgs->deviceInD0 == 0) {
+						pDevice->IntcSSTStatus = 0; //SST is inactive
+						SSTArgs->caller = STATUS_SUCCESS;
+						//mark device as inactive?
+					}
+					else {
+						SSTArgs->caller = STATUS_INVALID_PARAMETER_5;
+					}
+				}
+				else {
+					SSTArgs->caller = STATUS_BUFFER_TOO_SMALL;
+				}
+			}
+
+			//SST Query 1:
+			//	dword4: 10, dwordc: 0x9e, dword11: 0x0
+			//	deviceInD0: 0x1, byte25: 0
+
+			if (SSTArgs->dword4 == 10) { //gmax responds no matter what
+				if (SSTArgs->dwordC >= 0x15) {
+					if (SSTArgs->deviceInD0 == 1) {
+						pDevice->IntcSSTStatus = 1;
+						SSTArgs->caller = STATUS_SUCCESS;
+						//mark device as active??
+					}
+					else {
+						SSTArgs->caller = STATUS_INVALID_PARAMETER_5;
+					}
+				}
+				else {
+					SSTArgs->caller = STATUS_BUFFER_TOO_SMALL;
+				}
+			}
+
+			//SST Query 2:
+			//	dword4: 2048, dwordc: 0x9e, dword11: 0x00
+			//	deviceInD0: 0, byte25: 0
+
+			if (SSTArgs->dword4 == 2048) {
+				if (SSTArgs->dwordC >= 0x11) {
+					SSTArgs->deviceInD0 = 1;
+					SSTArgs->caller = STATUS_SUCCESS;
+				}
+				else {
+					SSTArgs->caller = STATUS_BUFFER_TOO_SMALL;
+				}
+			}
+
+			//SST Query 3:
+			//	dword4: 2051, dwordc: 0x9e, dword11: 0x00
+			//	deviceInD0: 0, byte25: 0
+
+			if (SSTArgs->dword4 == 2051) {
+				if (SSTArgs->dwordC >= 0x9E) {
+					if (SSTArgs->deviceInD0) {
+						SSTArgs->caller = STATUS_INVALID_PARAMETER;
+					} else {
+						
+						SSTArgs->deviceInD0 = 0;
+						SSTArgs->dword11 = (1 << 24) | 0;
+
+						SSTArgs->guid = GUID_SST_RTK_2;
+
+						SSTArgs->byte25 = 1;
+						SSTArgs->dword26 = 3;
+						SSTArgs->dword2A = 0;
+						SSTArgs->dword2E = 7;
+						SSTArgs->dword11 = 9;
+						SSTArgs->dword36 = 1;
+						SSTArgs->dword3A = 1;
+						SSTArgs->dword3E = 1;
+						SSTArgs->byte42 = 0;
+						SSTArgs->byte43 = 0;
+						SSTArgs->caller = STATUS_SUCCESS;
+					}
+				}
+				else {
+					SSTArgs->caller = STATUS_BUFFER_TOO_SMALL;
+				}
+			}
+
+			//This should be the minimum for SST to initialize (but no sound...)
+			//SST Query 4:
+			//	dword4: 2054, dwordc: 0x9e, dword11: 0x00
+			//	deviceInD0: 0, byte25: 0
+			if (SSTArgs->dword4 == 2054) {
+				if (SSTArgs->dwordC >= 0x9E) {
+					if (SSTArgs->deviceInD0) {
+						SSTArgs->caller = STATUS_INVALID_PARAMETER;
+					}
+					else {
+						SSTArgs->dword11 = 2;
+						SSTArgs->caller = STATUS_SUCCESS;
+					}
+				}
+				else {
+					SSTArgs->caller = STATUS_BUFFER_TOO_SMALL;
+				}
+			}
+
+			//SST Query 5:
+			//	dword4: 2055, dwordc: 0x9e, dword11: 0x00
+			//	deviceInD0: 0, byte25: 0
+
+			if (SSTArgs->dword4 == 2055) {
+				if (SSTArgs->dwordC < 0x22) {
+					SSTArgs->caller = STATUS_BUFFER_TOO_SMALL;
+				}
+				else {
+					SSTArgs->caller = STATUS_NOT_SUPPORTED;
+				}
+			}
+
+			//SST Query 6:
+			//	dword4: 13, dwordc: 0x9e, dword11: 0x00
+			//	deviceInD0: 1, byte25: 0
+			if (SSTArgs->dword4 == 13) {
+				if (SSTArgs->dwordC >= 0x14) {
+					if (SSTArgs->deviceInD0) {
+						pDevice->IntcSSTStatus = 1;
+						SSTArgs->caller = STATUS_SUCCESS;
+
+						//UpdateIntcSSTStatus(pDevice, 1);
+					}
+					else {
+						SSTArgs->caller = STATUS_INVALID_PARAMETER;
+					}
+				}
+				else {
+					SSTArgs->caller = STATUS_BUFFER_TOO_SMALL;
+				}
+			}
+
+			//SST Query 7:
+			//	dword4: 2064, dwordc: 0x9e, dword11: 0x00
+			//	deviceInD0: 0, byte25: 0
+			if (SSTArgs->dword4 == 2064) {
+				if (SSTArgs->dwordC >= 0x19) {
+					if (!SSTArgs->deviceInD0) {
+						unsigned int data1 = SSTArgs->guid.Data1;
+						DbgPrint("data1: %d\n", data1);
+						if (data1 != -1 && data1 < 1) {
+							SSTArgs->dword11 = 1; //enable speaker
+							SSTArgs->caller = STATUS_SUCCESS;
+						}
+						else {
+							SSTArgs->caller = STATUS_INVALID_PARAMETER;
+						}
+					}
+					else {
+						SSTArgs->caller = STATUS_INVALID_PARAMETER;
+					}
+				}
+				else {
+					SSTArgs->caller = STATUS_BUFFER_TOO_SMALL;
+				}
+			}
+
+			if (checkCaller) {
+				if (SSTArgs->caller != STATUS_SUCCESS) {
+					DbgPrint("Warning: Returned error 0x%x\n", SSTArgs->caller);
+				}
+			}
+		}
+#endif
+	}
+	else {
+		DbgPrint("Warning ChipModel didn't match. Proceeding with caution\n");
+		DbgPrint("dword4, c: %d, 0x%x\n", SSTArgs->dword4, SSTArgs->dwordC);
+
+		//On SST Init: chipModel = 0, caller = 0xc00000a3, dword4 = 10, dwordc: 0x9e
+
+		if (SSTArgs->dword4 == 10 && pDevice->IntcSSTWorkItem) {
+			WdfWorkItemEnqueue(pDevice->IntcSSTWorkItem); //SST driver was installed after us...
+		}
+	}
 }
 
 NTSTATUS
@@ -143,6 +468,21 @@ Status
 		return status;
 	}
 
+	WDF_OBJECT_ATTRIBUTES attributes;
+	WDF_WORKITEM_CONFIG workitemConfig;
+
+	WDF_OBJECT_ATTRIBUTES_INIT(&attributes);
+	WDF_OBJECT_ATTRIBUTES_SET_CONTEXT_TYPE(&attributes, MAXM_CONTEXT);
+	attributes.ParentObject = FxDevice;
+	WDF_WORKITEM_CONFIG_INIT(&workitemConfig, IntcSSTWorkItemFunc);
+	status = WdfWorkItemCreate(&workitemConfig,
+		&attributes,
+		&pDevice->IntcSSTWorkItem);
+	if (!NT_SUCCESS(status))
+	{
+		return status;
+	}
+
 	return status;
 }
 
@@ -174,6 +514,68 @@ Status
 
 	GpioTargetDeinitialize(FxDevice, &pDevice->SdmodeGpioContext);
 
+	if (pDevice->IntcSSTCallbackObj) {
+		ExUnregisterCallback(pDevice->IntcSSTCallbackObj);
+		pDevice->IntcSSTCallbackObj = NULL;
+	}
+
+	if (pDevice->IntcSSTWorkItem) {
+		WdfWorkItemFlush(pDevice->IntcSSTWorkItem);
+		WdfObjectDelete(pDevice->IntcSSTWorkItem);
+		pDevice->IntcSSTWorkItem = NULL;
+	}
+
+	if (pDevice->IntcSSTHwMultiCodecCallback) {
+		ObfDereferenceObject(pDevice->IntcSSTHwMultiCodecCallback);
+		pDevice->IntcSSTHwMultiCodecCallback = NULL;
+	}
+
+	return status;
+}
+
+NTSTATUS
+OnSelfManagedIoInit(
+	_In_
+	WDFDEVICE FxDevice
+) {
+	DbgPrint("OnSelfManagedIoInit Called!\n");
+
+	PMAXM_CONTEXT pDevice = GetDeviceContext(FxDevice);
+	NTSTATUS status = STATUS_SUCCESS;
+
+	UNICODE_STRING IntcAudioSSTMultiHwCodecAPI;
+	RtlInitUnicodeString(&IntcAudioSSTMultiHwCodecAPI, L"\\CallBack\\IntcAudioSSTMultiHwCodecAPI");
+
+
+	OBJECT_ATTRIBUTES attributes;
+	/*attributes.RootDirectory = NULL;
+	attributes.SecurityDescriptor = NULL;
+	attributes.SecurityQualityOfService = NULL;
+	attributes.Length = sizeof(OBJECT_ATTRIBUTES);
+	attributes.Attributes = OBJ_KERNEL_HANDLE | OBJ_OPENIF | OBJ_CASE_INSENSITIVE | OBJ_PERMANENT;*/
+	InitializeObjectAttributes(&attributes,
+		&IntcAudioSSTMultiHwCodecAPI,
+		OBJ_KERNEL_HANDLE | OBJ_OPENIF | OBJ_CASE_INSENSITIVE | OBJ_PERMANENT,
+		NULL,
+		NULL
+	);
+	status = ExCreateCallback(&pDevice->IntcSSTHwMultiCodecCallback, &attributes, TRUE, TRUE);
+	if (!NT_SUCCESS(status)) {
+
+		return status;
+	}
+
+	pDevice->IntcSSTCallbackObj = ExRegisterCallback(pDevice->IntcSSTHwMultiCodecCallback,
+		IntcSSTCallbackFunction,
+		pDevice->IntcSSTWorkItem
+	);
+	if (!pDevice->IntcSSTCallbackObj) {
+
+		return STATUS_NO_CALLBACK_ACTIVE;
+	}
+
+	UpdateIntcSSTStatus(pDevice, 0);
+
 	return status;
 }
 
@@ -204,7 +606,14 @@ Status
 	PMAXM_CONTEXT pDevice = GetDeviceContext(FxDevice);
 	NTSTATUS status = STATUS_SUCCESS;
 
-	BOOTCODEC(pDevice);
+	unsigned char gpio_data;
+	gpio_data = 1;
+	status =  GpioWriteDataSynchronously(&pDevice->SdmodeGpioContext, &gpio_data);
+	if (!NT_SUCCESS(status)) {
+		return status;
+	}
+	pDevice->DevicePoweredOn = TRUE;
+	UpdateIntcSSTStatus(pDevice, 0);
 
 	return status;
 }
@@ -234,6 +643,16 @@ Status
 	UNREFERENCED_PARAMETER(FxPreviousState);
 
 	PMAXM_CONTEXT pDevice = GetDeviceContext(FxDevice);
+	NTSTATUS status = STATUS_SUCCESS;
+
+	unsigned char gpio_data;
+	gpio_data = 0;
+	status = GpioWriteDataSynchronously(&pDevice->SdmodeGpioContext, &gpio_data);
+	if (!NT_SUCCESS(status)) {
+		return status;
+	}
+	pDevice->DevicePoweredOn = FALSE;
+	UpdateIntcSSTStatus(pDevice, 2);
 
 	return STATUS_SUCCESS;
 }
@@ -266,6 +685,7 @@ IN PWDFDEVICE_INIT DeviceInit
 
 		pnpCallbacks.EvtDevicePrepareHardware = OnPrepareHardware;
 		pnpCallbacks.EvtDeviceReleaseHardware = OnReleaseHardware;
+		pnpCallbacks.EvtDeviceSelfManagedIoInit = OnSelfManagedIoInit;
 		pnpCallbacks.EvtDeviceD0Entry = OnD0Entry;
 		pnpCallbacks.EvtDeviceD0Exit = OnD0Exit;
 
