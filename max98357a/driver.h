@@ -95,8 +95,6 @@ typedef struct _MAXM_CONTEXT
 	PCALLBACK_OBJECT IntcSSTHwMultiCodecCallback;
 	PVOID IntcSSTCallbackObj;
 
-	PVOID IntcSSTCallbackObj2; //for snooping only
-
 	IntcSSTArg sstArgTemp;
 
 } MAXM_CONTEXT, *PMAXM_CONTEXT;

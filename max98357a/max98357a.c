@@ -45,8 +45,6 @@ __in PUNICODE_STRING RegistryPath
 	return status;
 }
 
-#define SNOOP 0
-
 int IntCSSTArg2 = 1;
 
 VOID
@@ -54,9 +52,6 @@ UpdateIntcSSTStatus(
 	IN PMAXM_CONTEXT pDevice,
 	int sstStatus
 ) {
-#if SNOOP
-	DbgPrint("In snoop mode, not calling\n\n");
-#else
 	IntcSSTArg *SSTArg = &pDevice->sstArgTemp;
 	RtlZeroMemory(SSTArg, sizeof(IntcSSTArg));
 
@@ -64,7 +59,6 @@ UpdateIntcSSTStatus(
 		if (sstStatus != 1 || pDevice->IntcSSTStatus) {
 			SSTArg->chipModel = 98357;
 			SSTArg->caller = 0xc0000165; //gmaxcodec
-			DbgPrint("Set caller to 0x%x\n", SSTArg->caller);
 			if (sstStatus) {
 				if (sstStatus == 1) {
 					if (!pDevice->IntcSSTStatus) {
@@ -95,7 +89,6 @@ UpdateIntcSSTStatus(
 	else {
 		DbgPrint("No callback yet\n");
 	}
-#endif
 }
 
 VOID
@@ -105,8 +98,6 @@ IntcSSTWorkItemFunc(
 {
 	WDFDEVICE Device = (WDFDEVICE)WdfWorkItemGetParentObject(WorkItem);
 	PMAXM_CONTEXT pDevice = GetDeviceContext(Device);
-
-	DbgPrint("SST Work Item Func Called!\n");
 
 	UpdateIntcSSTStatus(pDevice, 0);
 }
@@ -120,71 +111,6 @@ DEFINE_GUID(GUID_SST_RTK_3,
 DEFINE_GUID(GUID_SST_RTK_4,
 	0xDFF21FE3, 0xF70F, 0x11D0, 0xB9, 0x17, 0x00, 0xA0, 0xC9, 0x22, 0x31, 0x96); //Line out
 
-#include <ntstrsafe.h>
-VOID
-IntcSSTCallbackGmaxDump(
-	IN WDFWORKITEM  WorkItem,
-	IntcSSTArg* SSTArgs,
-	PVOID Argument2
-) {
-	if (!WorkItem) {
-		DbgPrint("No Work Item in SSTCallback???\n");
-		return;
-	}
-	WDFDEVICE Device = (WDFDEVICE)WdfWorkItemGetParentObject(WorkItem);
-	PMAXM_CONTEXT pDevice = GetDeviceContext(Device);
-
-	DbgPrint("SST Snoop Callback function called!\n");
-
-	if (Argument2 == &IntCSSTArg2) {
-		DbgPrint("Ignoring call from ourself\n");
-		return;
-	}
-
-	if (SSTArgs->dwordC <= 0x10) {
-		DbgPrint("Returning (dwordC is too small): 0x%x\n", SSTArgs->dwordC);
-		return;
-	}
-
-	int32_t size = SSTArgs->dwordC;
-
-	DbgPrint("Sz: %d\n", size);
-
-	uint8_t* rawbuf = (uint8_t*)SSTArgs;
-	char* dumpStr = "PKT: ";
-	size_t dumpSz = strlen(dumpStr) + (5 * (size_t)size) + 1;
-	DbgPrint("DumpSz: %d\n", size);
-	char *logStr = ExAllocatePoolWithTag(NonPagedPool, dumpSz, MAXM_POOL_TAG);
-	if (!logStr) {
-		DbgPrint("Unable to allocate dump str\n");
-		return;
-	}
-	RtlZeroMemory(logStr, dumpSz);
-
-	if (!NT_SUCCESS(RtlStringCbPrintfA(logStr, dumpSz, "%s%s", logStr, dumpStr))) {
-		DbgPrint("Unable to append dump header to str\n");
-		ExFreePoolWithTag(logStr, MAXM_POOL_TAG);
-		return;
-	}
-	for (int i = 0; i < size; i++) {
-		NTSTATUS appendStat = 0;
-		if (i == size - 1) {
-			appendStat = RtlStringCbPrintfA(logStr, dumpSz, "%s0x%02x\n", logStr, rawbuf[i]);
-		}
-		else {
-			appendStat = RtlStringCbPrintfA(logStr, dumpSz, "%s0x%02x ", logStr, rawbuf[i]);
-		}
-
-		if (!NT_SUCCESS(appendStat)) {
-			DbgPrint("Unable to append dump byte %d str\n", i);
-			ExFreePoolWithTag(logStr, MAXM_POOL_TAG);
-			return;
-		}
-	}
-	DbgPrint("%s\n", logStr);
-	ExFreePoolWithTag(logStr, MAXM_POOL_TAG);
-}
-
 VOID
 IntcSSTCallbackFunction(
 	IN WDFWORKITEM  WorkItem,
@@ -192,41 +118,24 @@ IntcSSTCallbackFunction(
 	PVOID Argument2
 ) {
 	if (!WorkItem) {
-		DbgPrint("No Work Item in SSTCallback???\n");
 		return;
 	}
 	WDFDEVICE Device = (WDFDEVICE)WdfWorkItemGetParentObject(WorkItem);
 	PMAXM_CONTEXT pDevice = GetDeviceContext(Device);
 
-	DbgPrint("SST Callback function called!\n");
-
 	if (Argument2 == &IntCSSTArg2) {
-		DbgPrint("Ignoring call from ourself\n");
 		return;
 	}
 
 	//gmaxCodec checks that dwordC is greater than 0x10 first thing
 	if (SSTArgs->dwordC <= 0x10) {
-		DbgPrint("Returning (dwordC is too small): 0x%x\n", SSTArgs->dwordC);
 		return;
 	}
 
-	DbgPrint("ChipModel: %d\n", SSTArgs->chipModel);
-	DbgPrint("Caller: 0x%x\n", SSTArgs->caller);
 	//Intel Caller: 0xc00000a3 (STATUS_DEVICE_NOT_READY)
 	//GMax Caller: 0xc0000165
 
 	if (SSTArgs->chipModel == 98357) {
-#if SNOOP
-		if (!pDevice->IntcSSTCallbackObj2) {
-			pDevice->IntcSSTCallbackObj2 = ExRegisterCallback(pDevice->IntcSSTHwMultiCodecCallback,
-				IntcSSTCallbackGmaxDump,
-				pDevice->IntcSSTWorkItem
-			);
-			DbgPrint("Registered snooping for gmax\n");
-		}
-#endif
-
 		/*
 
 		Gmax (no SST driver):
@@ -247,22 +156,6 @@ IntcSSTCallbackFunction(
 						dword11 = 2
 
 		*/
-
-#if !SNOOP
-		DbgPrint("Should be 98357a callback! Dumping...\n");
-		DbgPrint("dword4, c, 11: %d, 0x%x, 0x%x\n", SSTArgs->dword4, SSTArgs->dwordC, SSTArgs->dword11);
-		DbgPrint("Caller: 0x%x\n", SSTArgs->caller);
-		DbgPrint("byte10, 25: 0x%x 0x%x\n", SSTArgs->deviceInD0, SSTArgs->byte25);
-
-		UNICODE_STRING guidStr;
-		if (NT_SUCCESS(RtlStringFromGUID(&SSTArgs->guid, &guidStr))) {
-			DbgPrint("guid: %ws\n", guidStr.Buffer);
-			RtlFreeUnicodeString(&guidStr);
-		}
-		else {
-			DbgPrint("Unable to get guid\n");
-		}
-
 		if (Argument2 != &IntCSSTArg2) { //Intel SST is calling us
 			/*SSTArgs->caller = 0; //pull this to 0?
 
@@ -442,12 +335,8 @@ IntcSSTCallbackFunction(
 				}
 			}
 		}
-#endif
 	}
 	else {
-		DbgPrint("Warning ChipModel didn't match. Proceeding with caution\n");
-		DbgPrint("dword4, c: %d, 0x%x\n", SSTArgs->dword4, SSTArgs->dwordC);
-
 		//On SST Init: chipModel = 0, caller = 0xc00000a3, dword4 = 10, dwordc: 0x9e
 
 		if (SSTArgs->dword4 == 10 && pDevice->IntcSSTWorkItem) {
@@ -539,13 +428,11 @@ Status
 		return status;
 	}
 
-#if !SNOOP
 	status = GpioTargetInitialize(FxDevice, &pDevice->SdmodeGpioContext);
 	if (!NT_SUCCESS(status))
 	{
 		return status;
 	}
-#endif
 
 	WDF_OBJECT_ATTRIBUTES attributes;
 	WDF_WORKITEM_CONFIG workitemConfig;
@@ -593,18 +480,11 @@ Status
 
 	UpdateIntcSSTStatus(pDevice, 2);
 
-#if !SNOOP
 	GpioTargetDeinitialize(FxDevice, &pDevice->SdmodeGpioContext);
-#endif
 
 	if (pDevice->IntcSSTCallbackObj) {
 		ExUnregisterCallback(pDevice->IntcSSTCallbackObj);
 		pDevice->IntcSSTCallbackObj = NULL;
-	}
-
-	if (pDevice->IntcSSTCallbackObj2) {
-		ExUnregisterCallback(pDevice->IntcSSTCallbackObj2);
-		pDevice->IntcSSTCallbackObj2 = NULL;
 	}
 
 	if (pDevice->IntcSSTWorkItem) {
@@ -626,8 +506,6 @@ OnSelfManagedIoInit(
 	_In_
 	WDFDEVICE FxDevice
 ) {
-	DbgPrint("OnSelfManagedIoInit Called!\n");
-
 	PMAXM_CONTEXT pDevice = GetDeviceContext(FxDevice);
 	NTSTATUS status = STATUS_SUCCESS;
 
@@ -689,14 +567,12 @@ Status
 	PMAXM_CONTEXT pDevice = GetDeviceContext(FxDevice);
 	NTSTATUS status = STATUS_SUCCESS;
 
-#if !SNOOP
 	unsigned char gpio_data;
 	gpio_data = 1;
 	status =  GpioWriteDataSynchronously(&pDevice->SdmodeGpioContext, &gpio_data);
 	if (!NT_SUCCESS(status)) {
 		return status;
 	}
-#endif
 	pDevice->DevicePoweredOn = TRUE;
 
 	return status;
@@ -729,14 +605,12 @@ Status
 	PMAXM_CONTEXT pDevice = GetDeviceContext(FxDevice);
 	NTSTATUS status = STATUS_SUCCESS;
 
-#if !SNOOP
 	unsigned char gpio_data;
 	gpio_data = 0;
 	status = GpioWriteDataSynchronously(&pDevice->SdmodeGpioContext, &gpio_data);
 	if (!NT_SUCCESS(status)) {
 		return status;
 	}
-#endif
 	pDevice->DevicePoweredOn = FALSE;
 
 	return STATUS_SUCCESS;
