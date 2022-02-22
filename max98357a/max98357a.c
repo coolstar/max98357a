@@ -233,7 +233,7 @@ IntcSSTCallbackFunction(
 						SSTArgs->guid = GUID_SST_RTK_2;
 
 						SSTArgs->byte25 = 1;
-						SSTArgs->dword26 = 3;
+						/*SSTArgs->dword26 = 3;
 						SSTArgs->dword2A = 0;
 						SSTArgs->dword2E = 7;
 						SSTArgs->dword32 = 9;
@@ -241,7 +241,7 @@ IntcSSTCallbackFunction(
 						SSTArgs->dword3A = 1;
 						SSTArgs->dword3E = 1;
 						SSTArgs->byte42 = 0;
-						SSTArgs->byte43 = 0;
+						SSTArgs->byte43 = 0;*/
 						SSTArgs->caller = STATUS_SUCCESS;
 					}
 				}
