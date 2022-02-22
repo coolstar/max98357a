@@ -112,13 +112,78 @@ IntcSSTWorkItemFunc(
 }
 
 DEFINE_GUID(GUID_SST_RTK_1,
-	0x963122C9, 0xA000, 0x17B9, 0x11, 0xD0, 0xF7, 0x0F, 0xDF, 0xF2, 0x1C, 0xE2);
+	0xDFF21CE2, 0xF70F, 0x11D0, 0xB9, 0x17, 0x00, 0xA0, 0xC9, 0x22, 0x31, 0x96); //Headphones
 DEFINE_GUID(GUID_SST_RTK_2,
-	0x963122C9, 0xA000, 0x17B9, 0x11, 0xD0, 0xF7, 0x0F, 0xDF, 0xF2, 0x1C, 0xE1); //gmax GUID (2nd in realtek)
+	0xDFF21CE1, 0xF70F, 0x11D0, 0xB9, 0x17, 0x00, 0xA0, 0xC9, 0x22, 0x31, 0x96); //InsideMobileLid
 DEFINE_GUID(GUID_SST_RTK_3,
-	0x963122C9, 0xA000, 0x17B9, 0x11, 0xD0, 0xF7, 0x0F, 0xDF, 0xF2, 0x1B, 0xE1);
+	0xDFF21BE1, 0xF70F, 0x11D0, 0xB9, 0x17, 0x00, 0xA0, 0xC9, 0x22, 0x31, 0x96); //Also InsideMobileLid?
 DEFINE_GUID(GUID_SST_RTK_4,
-	0x963122C9, 0xA000, 0x17B9, 0x11, 0xD0, 0xF7, 0x0F, 0xDF, 0xF2, 0x1F, 0xE3);
+	0xDFF21FE3, 0xF70F, 0x11D0, 0xB9, 0x17, 0x00, 0xA0, 0xC9, 0x22, 0x31, 0x96); //Line out
+
+#include <ntstrsafe.h>
+VOID
+IntcSSTCallbackGmaxDump(
+	IN WDFWORKITEM  WorkItem,
+	IntcSSTArg* SSTArgs,
+	PVOID Argument2
+) {
+	if (!WorkItem) {
+		DbgPrint("No Work Item in SSTCallback???\n");
+		return;
+	}
+	WDFDEVICE Device = (WDFDEVICE)WdfWorkItemGetParentObject(WorkItem);
+	PMAXM_CONTEXT pDevice = GetDeviceContext(Device);
+
+	DbgPrint("SST Snoop Callback function called!\n");
+
+	if (Argument2 == &IntCSSTArg2) {
+		DbgPrint("Ignoring call from ourself\n");
+		return;
+	}
+
+	if (SSTArgs->dwordC <= 0x10) {
+		DbgPrint("Returning (dwordC is too small): 0x%x\n", SSTArgs->dwordC);
+		return;
+	}
+
+	int32_t size = SSTArgs->dwordC;
+
+	DbgPrint("Sz: %d\n", size);
+
+	uint8_t* rawbuf = (uint8_t*)SSTArgs;
+	char* dumpStr = "PKT: ";
+	size_t dumpSz = strlen(dumpStr) + (5 * (size_t)size) + 1;
+	DbgPrint("DumpSz: %d\n", size);
+	char *logStr = ExAllocatePoolWithTag(NonPagedPool, dumpSz, MAXM_POOL_TAG);
+	if (!logStr) {
+		DbgPrint("Unable to allocate dump str\n");
+		return;
+	}
+	RtlZeroMemory(logStr, dumpSz);
+
+	if (!NT_SUCCESS(RtlStringCbPrintfA(logStr, dumpSz, "%s%s", logStr, dumpStr))) {
+		DbgPrint("Unable to append dump header to str\n");
+		ExFreePoolWithTag(logStr, MAXM_POOL_TAG);
+		return;
+	}
+	for (int i = 0; i < size; i++) {
+		NTSTATUS appendStat = 0;
+		if (i == size - 1) {
+			appendStat = RtlStringCbPrintfA(logStr, dumpSz, "%s0x%02x\n", logStr, rawbuf[i]);
+		}
+		else {
+			appendStat = RtlStringCbPrintfA(logStr, dumpSz, "%s0x%02x ", logStr, rawbuf[i]);
+		}
+
+		if (!NT_SUCCESS(appendStat)) {
+			DbgPrint("Unable to append dump byte %d str\n", i);
+			ExFreePoolWithTag(logStr, MAXM_POOL_TAG);
+			return;
+		}
+	}
+	DbgPrint("%s\n", logStr);
+	ExFreePoolWithTag(logStr, MAXM_POOL_TAG);
+}
 
 VOID
 IntcSSTCallbackFunction(
@@ -152,19 +217,15 @@ IntcSSTCallbackFunction(
 	//GMax Caller: 0xc0000165
 
 	if (SSTArgs->chipModel == 98357) {
-		DbgPrint("Should be 98357a callback! Dumping...\n");
-		DbgPrint("dword4, c, 11: %d, 0x%x, 0x%x\n", SSTArgs->dword4, SSTArgs->dwordC, SSTArgs->dword11);
-		DbgPrint("Caller: 0x%x\n", SSTArgs->caller);
-		DbgPrint("byte10, 25: 0x%x 0x%x\n", SSTArgs->deviceInD0, SSTArgs->byte25);
-
-		UNICODE_STRING guidStr;
-		if (NT_SUCCESS(RtlStringFromGUID(&SSTArgs->guid, &guidStr))) {
-			DbgPrint("guid: %ws\n", guidStr.Buffer);
-			RtlFreeUnicodeString(&guidStr);
+#if SNOOP
+		if (!pDevice->IntcSSTCallbackObj2) {
+			pDevice->IntcSSTCallbackObj2 = ExRegisterCallback(pDevice->IntcSSTHwMultiCodecCallback,
+				IntcSSTCallbackGmaxDump,
+				pDevice->IntcSSTWorkItem
+			);
+			DbgPrint("Registered snooping for gmax\n");
 		}
-		else {
-			DbgPrint("Unable to get guid\n");
-		}
+#endif
 
 		/*
 
@@ -188,6 +249,20 @@ IntcSSTCallbackFunction(
 		*/
 
 #if !SNOOP
+		DbgPrint("Should be 98357a callback! Dumping...\n");
+		DbgPrint("dword4, c, 11: %d, 0x%x, 0x%x\n", SSTArgs->dword4, SSTArgs->dwordC, SSTArgs->dword11);
+		DbgPrint("Caller: 0x%x\n", SSTArgs->caller);
+		DbgPrint("byte10, 25: 0x%x 0x%x\n", SSTArgs->deviceInD0, SSTArgs->byte25);
+
+		UNICODE_STRING guidStr;
+		if (NT_SUCCESS(RtlStringFromGUID(&SSTArgs->guid, &guidStr))) {
+			DbgPrint("guid: %ws\n", guidStr.Buffer);
+			RtlFreeUnicodeString(&guidStr);
+		}
+		else {
+			DbgPrint("Unable to get guid\n");
+		}
+
 		if (Argument2 != &IntCSSTArg2) { //Intel SST is calling us
 			/*SSTArgs->caller = 0; //pull this to 0?
 
@@ -268,7 +343,7 @@ IntcSSTCallbackFunction(
 						SSTArgs->dword26 = 3;
 						SSTArgs->dword2A = 0;
 						SSTArgs->dword2E = 7;
-						SSTArgs->dword11 = 9;
+						SSTArgs->dword32 = 9;
 						SSTArgs->dword36 = 1;
 						SSTArgs->dword3A = 1;
 						SSTArgs->dword3E = 1;
@@ -282,7 +357,8 @@ IntcSSTCallbackFunction(
 				}
 			}
 
-			//This should be the minimum for SST to initialize (but no sound...)
+#if 0
+			//This is the minimum for SST to initialize. Everything after is extra
 			//SST Query 4:
 			//	dword4: 2054, dwordc: 0x9e, dword11: 0x00
 			//	deviceInD0: 0, byte25: 0
@@ -358,6 +434,7 @@ IntcSSTCallbackFunction(
 					SSTArgs->caller = STATUS_BUFFER_TOO_SMALL;
 				}
 			}
+#endif
 
 			if (checkCaller) {
 				if (SSTArgs->caller != STATUS_SUCCESS) {
@@ -462,11 +539,13 @@ Status
 		return status;
 	}
 
+#if !SNOOP
 	status = GpioTargetInitialize(FxDevice, &pDevice->SdmodeGpioContext);
 	if (!NT_SUCCESS(status))
 	{
 		return status;
 	}
+#endif
 
 	WDF_OBJECT_ATTRIBUTES attributes;
 	WDF_WORKITEM_CONFIG workitemConfig;
@@ -512,11 +591,20 @@ Status
 
 	UNREFERENCED_PARAMETER(FxResourcesTranslated);
 
+	UpdateIntcSSTStatus(pDevice, 2);
+
+#if !SNOOP
 	GpioTargetDeinitialize(FxDevice, &pDevice->SdmodeGpioContext);
+#endif
 
 	if (pDevice->IntcSSTCallbackObj) {
 		ExUnregisterCallback(pDevice->IntcSSTCallbackObj);
 		pDevice->IntcSSTCallbackObj = NULL;
+	}
+
+	if (pDevice->IntcSSTCallbackObj2) {
+		ExUnregisterCallback(pDevice->IntcSSTCallbackObj2);
+		pDevice->IntcSSTCallbackObj2 = NULL;
 	}
 
 	if (pDevice->IntcSSTWorkItem) {
@@ -548,11 +636,6 @@ OnSelfManagedIoInit(
 
 
 	OBJECT_ATTRIBUTES attributes;
-	/*attributes.RootDirectory = NULL;
-	attributes.SecurityDescriptor = NULL;
-	attributes.SecurityQualityOfService = NULL;
-	attributes.Length = sizeof(OBJECT_ATTRIBUTES);
-	attributes.Attributes = OBJ_KERNEL_HANDLE | OBJ_OPENIF | OBJ_CASE_INSENSITIVE | OBJ_PERMANENT;*/
 	InitializeObjectAttributes(&attributes,
 		&IntcAudioSSTMultiHwCodecAPI,
 		OBJ_KERNEL_HANDLE | OBJ_OPENIF | OBJ_CASE_INSENSITIVE | OBJ_PERMANENT,
@@ -606,14 +689,15 @@ Status
 	PMAXM_CONTEXT pDevice = GetDeviceContext(FxDevice);
 	NTSTATUS status = STATUS_SUCCESS;
 
+#if !SNOOP
 	unsigned char gpio_data;
 	gpio_data = 1;
 	status =  GpioWriteDataSynchronously(&pDevice->SdmodeGpioContext, &gpio_data);
 	if (!NT_SUCCESS(status)) {
 		return status;
 	}
+#endif
 	pDevice->DevicePoweredOn = TRUE;
-	UpdateIntcSSTStatus(pDevice, 0);
 
 	return status;
 }
@@ -645,14 +729,15 @@ Status
 	PMAXM_CONTEXT pDevice = GetDeviceContext(FxDevice);
 	NTSTATUS status = STATUS_SUCCESS;
 
+#if !SNOOP
 	unsigned char gpio_data;
 	gpio_data = 0;
 	status = GpioWriteDataSynchronously(&pDevice->SdmodeGpioContext, &gpio_data);
 	if (!NT_SUCCESS(status)) {
 		return status;
 	}
+#endif
 	pDevice->DevicePoweredOn = FALSE;
-	UpdateIntcSSTStatus(pDevice, 2);
 
 	return STATUS_SUCCESS;
 }

@@ -16,6 +16,7 @@
 #pragma warning(disable:4214)  // suppress bit field types other than int warning
 #include <hidport.h>
 
+#include <stdint.h>
 #include "gpiowrapper.h"
 
 //
@@ -37,27 +38,42 @@ typedef struct _FAST_GPIO {
 	UINT32 DW0;
 } FAST_GPIO;
 
-typedef __unaligned struct _IntcSSTArg
+#pragma pack(push,1)
+typedef struct _IntcSSTArg
 {
-	INT32 chipModel;
-	INT32 dword4;
-	INT32 caller;
-	INT32 dwordC; //Size?
-	BYTE deviceInD0;
-	INT32 dword11;
+	int32_t chipModel;
+	int32_t dword4;
+	int32_t caller;
+	int32_t dwordC; //Size?
+
+#ifdef __GNUC__
+	char EndOfHeader[0];
+#endif
+
+	uint8_t deviceInD0;
+#ifdef __GNUC__
+	char EndOfPowerCfg[0];
+#endif
+
+	int32_t dword11;
 	GUID guid;
-	BYTE byte25;
-	INT32 dword26;
-	INT32 dword2A;
-	INT32 dword2E;
-	INT32 dword32;
-	INT32 dword36;
-	INT32 dword3A;
-	INT32 dword3E;
-	BYTE byte42;
-	BYTE byte43;
-	char padding[80]; //idk what this is for
-} IntcSSTArg, * PIntcSSTArg;
+
+#ifdef __GNUC__
+	char EndOfGUID[0];
+#endif
+	uint8_t byte25;
+	int32_t dword26;
+	int32_t dword2A;
+	int32_t dword2E;
+	int32_t dword32;
+	int32_t dword36;
+	int32_t dword3A;
+	int32_t dword3E;
+	uint8_t byte42;
+	uint8_t byte43;
+	char padding[90]; //idk what this is for
+}  IntcSSTArg, * PIntcSSTArg;
+#pragma pack(pop)
 
 typedef struct _MAXM_CONTEXT
 {
@@ -78,6 +94,8 @@ typedef struct _MAXM_CONTEXT
 	WDFWORKITEM IntcSSTWorkItem;
 	PCALLBACK_OBJECT IntcSSTHwMultiCodecCallback;
 	PVOID IntcSSTCallbackObj;
+
+	PVOID IntcSSTCallbackObj2; //for snooping only
 
 	IntcSSTArg sstArgTemp;
 
