@@ -42,9 +42,9 @@ typedef struct _FAST_GPIO {
 typedef struct _IntcSSTArg
 {
 	int32_t chipModel;
-	int32_t dword4;
+	int32_t sstQuery;
 	int32_t caller;
-	int32_t dwordC; //Size?
+	int32_t querySize;
 
 #ifdef __GNUC__
 	char EndOfHeader[0];

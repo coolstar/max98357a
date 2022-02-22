@@ -64,20 +64,20 @@ UpdateIntcSSTStatus(
 					if (!pDevice->IntcSSTStatus) {
 						return;
 					}
-					SSTArg->dword4 = 12;
+					SSTArg->sstQuery = 12;
 					SSTArg->dword11 = 2;
-					SSTArg->dwordC = 21;
+					SSTArg->querySize = 21;
 				}
 				else {
-					SSTArg->dword4 = 11;
-					SSTArg->dwordC = 20;
+					SSTArg->sstQuery = 11;
+					SSTArg->querySize = 20;
 				}
 
 				SSTArg->deviceInD0 = (pDevice->DevicePoweredOn != 0);
 			}
 			else {
-				SSTArg->dword4 = 10;
-				SSTArg->dwordC = 18;
+				SSTArg->sstQuery = 10;
+				SSTArg->querySize = 18;
 				SSTArg->deviceInD0 = 1;
 			}
 			ExNotifyCallback(pDevice->IntcSSTHwMultiCodecCallback, SSTArg, &IntCSSTArg2);
@@ -127,8 +127,8 @@ IntcSSTCallbackFunction(
 		return;
 	}
 
-	//gmaxCodec checks that dwordC is greater than 0x10 first thing
-	if (SSTArgs->dwordC <= 0x10) {
+	//gmaxCodec checks that querySize is greater than 0x10 first thing
+	if (SSTArgs->querySize <= 0x10) {
 		return;
 	}
 
@@ -139,11 +139,11 @@ IntcSSTCallbackFunction(
 		/*
 
 		Gmax (no SST driver):
-			init:	dword4 = 10
+			init:	sstQuery = 10
 					dwordc = 18
 					deviceInD0 = 1
 
-			stop:	dword4 = 11
+			stop:	sstQuery = 11
 					dwordc = 20
 					deviceInD0 = 0
 		*/
@@ -151,7 +151,7 @@ IntcSSTCallbackFunction(
 		/*
 			
 		Gmax (SST driver)
-			post-init:	dword4 = 12
+			post-init:	sstQuery = 12
 						dwordc = 21
 						dword11 = 2
 
@@ -167,8 +167,8 @@ IntcSSTCallbackFunction(
 
 			bool checkCaller = (SSTArgs->caller != 0);
 
-			if (SSTArgs->dword4 == 11) {
-				if (SSTArgs->dwordC >= 0x15) {
+			if (SSTArgs->sstQuery == 11) {
+				if (SSTArgs->querySize >= 0x15) {
 					if (SSTArgs->deviceInD0 == 0) {
 						pDevice->IntcSSTStatus = 0; //SST is inactive
 						SSTArgs->caller = STATUS_SUCCESS;
@@ -184,11 +184,11 @@ IntcSSTCallbackFunction(
 			}
 
 			//SST Query 1:
-			//	dword4: 10, dwordc: 0x9e, dword11: 0x0
+			//	sstQuery: 10, dwordc: 0x9e, dword11: 0x0
 			//	deviceInD0: 0x1, byte25: 0
 
-			if (SSTArgs->dword4 == 10) { //gmax responds no matter what
-				if (SSTArgs->dwordC >= 0x15) {
+			if (SSTArgs->sstQuery == 10) { //gmax responds no matter what
+				if (SSTArgs->querySize >= 0x15) {
 					if (SSTArgs->deviceInD0 == 1) {
 						pDevice->IntcSSTStatus = 1;
 						SSTArgs->caller = STATUS_SUCCESS;
@@ -204,11 +204,11 @@ IntcSSTCallbackFunction(
 			}
 
 			//SST Query 2:
-			//	dword4: 2048, dwordc: 0x9e, dword11: 0x00
+			//	sstQuery: 2048, dwordc: 0x9e, dword11: 0x00
 			//	deviceInD0: 0, byte25: 0
 
-			if (SSTArgs->dword4 == 2048) {
-				if (SSTArgs->dwordC >= 0x11) {
+			if (SSTArgs->sstQuery == 2048) {
+				if (SSTArgs->querySize >= 0x11) {
 					SSTArgs->deviceInD0 = 1;
 					SSTArgs->caller = STATUS_SUCCESS;
 				}
@@ -218,11 +218,11 @@ IntcSSTCallbackFunction(
 			}
 
 			//SST Query 3:
-			//	dword4: 2051, dwordc: 0x9e, dword11: 0x00
+			//	sstQuery: 2051, dwordc: 0x9e, dword11: 0x00
 			//	deviceInD0: 0, byte25: 0
 
-			if (SSTArgs->dword4 == 2051) {
-				if (SSTArgs->dwordC >= 0x9E) {
+			if (SSTArgs->sstQuery == 2051) {
+				if (SSTArgs->querySize >= 0x9E) {
 					if (SSTArgs->deviceInD0) {
 						SSTArgs->caller = STATUS_INVALID_PARAMETER;
 					} else {
@@ -253,10 +253,10 @@ IntcSSTCallbackFunction(
 #if 0
 			//This is the minimum for SST to initialize. Everything after is extra
 			//SST Query 4:
-			//	dword4: 2054, dwordc: 0x9e, dword11: 0x00
+			//	sstQuery: 2054, dwordc: 0x9e, dword11: 0x00
 			//	deviceInD0: 0, byte25: 0
-			if (SSTArgs->dword4 == 2054) {
-				if (SSTArgs->dwordC >= 0x9E) {
+			if (SSTArgs->sstQuery == 2054) {
+				if (SSTArgs->querySize >= 0x9E) {
 					if (SSTArgs->deviceInD0) {
 						SSTArgs->caller = STATUS_INVALID_PARAMETER;
 					}
@@ -271,11 +271,11 @@ IntcSSTCallbackFunction(
 			}
 
 			//SST Query 5:
-			//	dword4: 2055, dwordc: 0x9e, dword11: 0x00
+			//	sstQuery: 2055, dwordc: 0x9e, dword11: 0x00
 			//	deviceInD0: 0, byte25: 0
 
-			if (SSTArgs->dword4 == 2055) {
-				if (SSTArgs->dwordC < 0x22) {
+			if (SSTArgs->sstQuery == 2055) {
+				if (SSTArgs->querySize < 0x22) {
 					SSTArgs->caller = STATUS_BUFFER_TOO_SMALL;
 				}
 				else {
@@ -284,10 +284,10 @@ IntcSSTCallbackFunction(
 			}
 
 			//SST Query 6:
-			//	dword4: 13, dwordc: 0x9e, dword11: 0x00
+			//	sstQuery: 13, dwordc: 0x9e, dword11: 0x00
 			//	deviceInD0: 1, byte25: 0
-			if (SSTArgs->dword4 == 13) {
-				if (SSTArgs->dwordC >= 0x14) {
+			if (SSTArgs->sstQuery == 13) {
+				if (SSTArgs->querySize >= 0x14) {
 					if (SSTArgs->deviceInD0) {
 						pDevice->IntcSSTStatus = 1;
 						SSTArgs->caller = STATUS_SUCCESS;
@@ -304,10 +304,10 @@ IntcSSTCallbackFunction(
 			}
 
 			//SST Query 7:
-			//	dword4: 2064, dwordc: 0x9e, dword11: 0x00
+			//	sstQuery: 2064, dwordc: 0x9e, dword11: 0x00
 			//	deviceInD0: 0, byte25: 0
-			if (SSTArgs->dword4 == 2064) {
-				if (SSTArgs->dwordC >= 0x19) {
+			if (SSTArgs->sstQuery == 2064) {
+				if (SSTArgs->querySize >= 0x19) {
 					if (!SSTArgs->deviceInD0) {
 						unsigned int data1 = SSTArgs->guid.Data1;
 						DbgPrint("data1: %d\n", data1);
@@ -337,9 +337,9 @@ IntcSSTCallbackFunction(
 		}
 	}
 	else {
-		//On SST Init: chipModel = 0, caller = 0xc00000a3, dword4 = 10, dwordc: 0x9e
+		//On SST Init: chipModel = 0, caller = 0xc00000a3, sstQuery = 10, dwordc: 0x9e
 
-		if (SSTArgs->dword4 == 10 && pDevice->IntcSSTWorkItem) {
+		if (SSTArgs->sstQuery == 10 && pDevice->IntcSSTWorkItem) {
 			WdfWorkItemEnqueue(pDevice->IntcSSTWorkItem); //SST driver was installed after us...
 		}
 	}
