@@ -12,12 +12,13 @@
 #pragma warning(default:4214)
 #include <wdf.h>
 
-#pragma warning(disable:4201)  // suppress nameless struct/union warning
-#pragma warning(disable:4214)  // suppress bit field types other than int warning
-#include <hidport.h>
+#include <portcls.h>
 
 #include <stdint.h>
 #include "gpiowrapper.h"
+
+#define JACKDESC_RGB(r, g, b) \
+    ((COLORREF)((r << 16) | (g << 8) | (b)))
 
 //
 // String definitions

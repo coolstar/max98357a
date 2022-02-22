@@ -184,7 +184,7 @@ IntcSSTCallbackFunction(
 			}
 
 			//SST Query 1:
-			//	sstQuery: 10, dwordc: 0x9e, dword11: 0x0
+			//	sstQuery: 10, querySize: 0x9e, dword11: 0x0
 			//	deviceInD0: 0x1, byte25: 0
 
 			if (SSTArgs->sstQuery == 10) { //gmax responds no matter what
@@ -204,7 +204,7 @@ IntcSSTCallbackFunction(
 			}
 
 			//SST Query 2:
-			//	sstQuery: 2048, dwordc: 0x9e, dword11: 0x00
+			//	sstQuery: 2048, querySize: 0x9e, dword11: 0x00
 			//	deviceInD0: 0, byte25: 0
 
 			if (SSTArgs->sstQuery == 2048) {
@@ -218,7 +218,7 @@ IntcSSTCallbackFunction(
 			}
 
 			//SST Query 3:
-			//	sstQuery: 2051, dwordc: 0x9e, dword11: 0x00
+			//	sstQuery: 2051, querySize: 0x9e, dword11: 0x00
 			//	deviceInD0: 0, byte25: 0
 
 			if (SSTArgs->sstQuery == 2051) {
@@ -233,15 +233,15 @@ IntcSSTCallbackFunction(
 						SSTArgs->guid = GUID_SST_RTK_2;
 
 						SSTArgs->byte25 = 1;
-						/*SSTArgs->dword26 = 3;
-						SSTArgs->dword2A = 0;
-						SSTArgs->dword2E = 7;
-						SSTArgs->dword32 = 9;
-						SSTArgs->dword36 = 1;
-						SSTArgs->dword3A = 1;
-						SSTArgs->dword3E = 1;
+						SSTArgs->dword26 = KSAUDIO_SPEAKER_STEREO; //Channel Mapping
+						SSTArgs->dword2A = JACKDESC_RGB(255, 174, 201); //Color (gmax sets to 0)
+						SSTArgs->dword2E = eConnTypeOtherAnalog; //EPcxConnectionType
+						SSTArgs->dword32 = eGeoLocInsideMobileLid; //EPcxGeoLocation
+						SSTArgs->dword36 = eGenLocInternal; //genLocation?
+						SSTArgs->dword3A = ePortConnIntegratedDevice; //portConnection?
+						SSTArgs->dword3E = 1; //isConnected?
 						SSTArgs->byte42 = 0;
-						SSTArgs->byte43 = 0;*/
+						SSTArgs->byte43 = 0;
 						SSTArgs->caller = STATUS_SUCCESS;
 					}
 				}
@@ -250,10 +250,9 @@ IntcSSTCallbackFunction(
 				}
 			}
 
-#if 0
 			//This is the minimum for SST to initialize. Everything after is extra
 			//SST Query 4:
-			//	sstQuery: 2054, dwordc: 0x9e, dword11: 0x00
+			//	sstQuery: 2054, querySize: 0x9e, dword11: 0x00
 			//	deviceInD0: 0, byte25: 0
 			if (SSTArgs->sstQuery == 2054) {
 				if (SSTArgs->querySize >= 0x9E) {
@@ -271,7 +270,7 @@ IntcSSTCallbackFunction(
 			}
 
 			//SST Query 5:
-			//	sstQuery: 2055, dwordc: 0x9e, dword11: 0x00
+			//	sstQuery: 2055, querySize: 0x9e, dword11: 0x00
 			//	deviceInD0: 0, byte25: 0
 
 			if (SSTArgs->sstQuery == 2055) {
@@ -284,7 +283,7 @@ IntcSSTCallbackFunction(
 			}
 
 			//SST Query 6:
-			//	sstQuery: 13, dwordc: 0x9e, dword11: 0x00
+			//	sstQuery: 13, querySize: 0x9e, dword11: 0x00
 			//	deviceInD0: 1, byte25: 0
 			if (SSTArgs->sstQuery == 13) {
 				if (SSTArgs->querySize >= 0x14) {
@@ -304,7 +303,7 @@ IntcSSTCallbackFunction(
 			}
 
 			//SST Query 7:
-			//	sstQuery: 2064, dwordc: 0x9e, dword11: 0x00
+			//	sstQuery: 2064, querySize: 0x9e, dword11: 0x00
 			//	deviceInD0: 0, byte25: 0
 			if (SSTArgs->sstQuery == 2064) {
 				if (SSTArgs->querySize >= 0x19) {
@@ -312,7 +311,7 @@ IntcSSTCallbackFunction(
 						unsigned int data1 = SSTArgs->guid.Data1;
 						DbgPrint("data1: %d\n", data1);
 						if (data1 != -1 && data1 < 1) {
-							SSTArgs->dword11 = 1; //enable speaker
+							SSTArgs->dword11 = 0; //no feedback on max98357a
 							SSTArgs->caller = STATUS_SUCCESS;
 						}
 						else {
@@ -327,7 +326,6 @@ IntcSSTCallbackFunction(
 					SSTArgs->caller = STATUS_BUFFER_TOO_SMALL;
 				}
 			}
-#endif
 
 			if (checkCaller) {
 				if (SSTArgs->caller != STATUS_SUCCESS) {
