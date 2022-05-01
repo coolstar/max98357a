@@ -82,12 +82,6 @@ UpdateIntcSSTStatus(
 			}
 			ExNotifyCallback(pDevice->IntcSSTHwMultiCodecCallback, SSTArg, &IntCSSTArg2);
 		}
-		else {
-			DbgPrint("Ignoring sstStatus = 1\n");
-		}
-	}
-	else {
-		DbgPrint("No callback yet\n");
 	}
 }
 
@@ -157,14 +151,6 @@ IntcSSTCallbackFunction(
 
 		*/
 		if (Argument2 != &IntCSSTArg2) { //Intel SST is calling us
-			/*SSTArgs->caller = 0; //pull this to 0?
-
-			INT8 newSSTStatus = SSTArgs->deviceInD0 != 0;
-			if (newSSTStatus != pDevice->IntcSSTStatus) {
-				pDevice->IntcSSTStatus = newSSTStatus;
-				UpdateIntcSSTStatus(pDevice, 1);
-			}*/
-
 			bool checkCaller = (SSTArgs->caller != 0);
 
 			if (SSTArgs->sstQuery == 11) {
@@ -309,7 +295,7 @@ IntcSSTCallbackFunction(
 				if (SSTArgs->querySize >= 0x19) {
 					if (!SSTArgs->deviceInD0) {
 						unsigned int data1 = SSTArgs->guid.Data1;
-						DbgPrint("data1: %d\n", data1);
+						//DbgPrint("data1: %d\n", data1);
 						if (data1 != -1 && data1 < 1) {
 							SSTArgs->dword11 = 0; //no feedback on max98357a
 							SSTArgs->caller = STATUS_SUCCESS;
@@ -329,7 +315,7 @@ IntcSSTCallbackFunction(
 
 			if (checkCaller) {
 				if (SSTArgs->caller != STATUS_SUCCESS) {
-					DbgPrint("Warning: Returned error 0x%x\n", SSTArgs->caller);
+					//DbgPrint("Warning: Returned error 0x%x; query: %d\n", SSTArgs->caller, SSTArgs->sstQuery);
 				}
 			}
 		}
@@ -372,8 +358,6 @@ Status
 	PMAXM_CONTEXT pDevice = GetDeviceContext(FxDevice);
 	BOOLEAN fSdmodeGpioResourceFound = FALSE;
 	NTSTATUS status = STATUS_INSUFFICIENT_RESOURCES;
-
-	DbgPrint("OnPrepareHardware called\n");
 
 	UNREFERENCED_PARAMETER(FxResourcesRaw);
 
