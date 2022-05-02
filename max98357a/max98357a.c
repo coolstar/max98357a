@@ -608,9 +608,7 @@ IN PWDFDEVICE_INIT DeviceInit
 	WDF_IO_QUEUE_CONFIG           queueConfig;
 	WDF_OBJECT_ATTRIBUTES         attributes;
 	WDFDEVICE                     device;
-	WDF_INTERRUPT_CONFIG interruptConfig;
 	WDFQUEUE                      queue;
-	UCHAR                         minorFunction;
 	PMAXM_CONTEXT               devContext;
 
 	UNREFERENCED_PARAMETER(Driver);
