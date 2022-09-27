@@ -76,6 +76,26 @@ typedef struct _IntcSSTArg
 }  IntcSSTArg, * PIntcSSTArg;
 #pragma pack(pop)
 
+typedef enum {
+	CSAudioEndpointTypeDSP,
+	CSAudioEndpointTypeSpeaker,
+	CSAudioEndpointTypeHeadphone,
+	CSAudioEndpointTypeMicArray,
+	CSAudioEndpointTypeMicJack
+} CSAudioEndpointType;
+
+typedef enum {
+	CSAudioEndpointRegister,
+	CSAudioEndpointStart,
+	CSAudioEndpointStop
+} CSAudioEndpointRequest;
+
+typedef struct CSAUDIOARG {
+	UINT32 argSz;
+	CSAudioEndpointType endpointType;
+	CSAudioEndpointRequest endpointRequest;
+} CsAudioArg, * PCsAudioArg;
+
 typedef struct _MAXM_CONTEXT
 {
 
@@ -95,6 +115,12 @@ typedef struct _MAXM_CONTEXT
 	WDFWORKITEM IntcSSTWorkItem;
 	PCALLBACK_OBJECT IntcSSTHwMultiCodecCallback;
 	PVOID IntcSSTCallbackObj;
+
+	WDFWORKITEM CSAudioWorkItem;
+	PCALLBACK_OBJECT CSAudioAPICallback;
+	PVOID CSAudioAPICallbackObj;
+
+	BOOL CSAudioManaged;
 
 	IntcSSTArg sstArgTemp;
 

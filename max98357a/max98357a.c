@@ -46,6 +46,7 @@ __in PUNICODE_STRING RegistryPath
 }
 
 int IntCSSTArg2 = 1;
+int CsAudioArg2 = 1;
 
 VOID
 UpdateIntcSSTStatus(
@@ -329,6 +330,63 @@ IntcSSTCallbackFunction(
 	}
 }
 
+VOID
+CsAudioWorkItemFunc(
+	IN WDFWORKITEM  WorkItem
+)
+{
+	WDFDEVICE Device = (WDFDEVICE)WdfWorkItemGetParentObject(WorkItem);
+	PMAXM_CONTEXT pDevice = GetDeviceContext(Device);
+
+	LARGE_INTEGER Interval;
+	Interval.QuadPart = -10 * 1000 * 5; //5 ms delay to avoid popping on Intel SST (Only CSAudio can use this fix though)
+	KeDelayExecutionThread(KernelMode, FALSE, &Interval);
+
+	unsigned char gpio_data;
+	gpio_data = 1;
+	if (NT_SUCCESS(GpioWriteDataSynchronously(&pDevice->SdmodeGpioContext, &gpio_data))) {
+		pDevice->DevicePoweredOn = TRUE;
+	}
+}
+
+VOID
+CsAudioCallbackFunction(
+	IN WDFWORKITEM  WorkItem,
+	CsAudioArg* arg,
+	PVOID Argument2
+) {
+	if (!WorkItem) {
+		return;
+	}
+	WDFDEVICE Device = (WDFDEVICE)WdfWorkItemGetParentObject(WorkItem);
+	PMAXM_CONTEXT pDevice = GetDeviceContext(Device);
+
+	if (Argument2 == &CsAudioArg2) {
+		return;
+	}
+
+	pDevice->CSAudioManaged = TRUE;
+
+	CsAudioArg localArg;
+	RtlZeroMemory(&localArg, sizeof(CsAudioArg));
+	RtlCopyMemory(&localArg, arg, min(arg->argSz, sizeof(CsAudioArg)));
+
+	if (localArg.endpointType != CSAudioEndpointTypeSpeaker) {
+		return;
+	}
+
+	if (localArg.endpointRequest == CSAudioEndpointStop || localArg.endpointRequest == CSAudioEndpointStart) {
+		unsigned char gpio_data;
+		gpio_data = 0;
+		if (NT_SUCCESS(GpioWriteDataSynchronously(&pDevice->SdmodeGpioContext, &gpio_data))) {
+			pDevice->DevicePoweredOn = FALSE;
+		}
+	}
+	if (localArg.endpointRequest == CSAudioEndpointStart) {
+		WdfWorkItemEnqueue(pDevice->CSAudioWorkItem);
+	}
+}
+
 NTSTATUS
 OnPrepareHardware(
 _In_  WDFDEVICE     FxDevice,
@@ -431,6 +489,18 @@ Status
 		return status;
 	}
 
+	WDF_OBJECT_ATTRIBUTES_INIT(&attributes);
+	WDF_OBJECT_ATTRIBUTES_SET_CONTEXT_TYPE(&attributes, MAXM_CONTEXT);
+	attributes.ParentObject = FxDevice;
+	WDF_WORKITEM_CONFIG_INIT(&workitemConfig, CsAudioWorkItemFunc);
+	status = WdfWorkItemCreate(&workitemConfig,
+		&attributes,
+		&pDevice->CSAudioWorkItem);
+	if (!NT_SUCCESS(status))
+	{
+		return status;
+	}
+
 	return status;
 }
 
@@ -480,6 +550,22 @@ Status
 		pDevice->IntcSSTHwMultiCodecCallback = NULL;
 	}
 
+	if (pDevice->CSAudioAPICallbackObj) {
+		ExUnregisterCallback(pDevice->CSAudioAPICallbackObj);
+		pDevice->CSAudioAPICallbackObj = NULL;
+	}
+
+	if (pDevice->CSAudioWorkItem) {
+		WdfWorkItemFlush(pDevice->CSAudioWorkItem);
+		WdfObjectDelete(pDevice->CSAudioWorkItem);
+		pDevice->CSAudioWorkItem = NULL;
+	}
+
+	if (pDevice->CSAudioAPICallback) {
+		ObfDereferenceObject(pDevice->CSAudioAPICallback);
+		pDevice->CSAudioAPICallback = NULL;
+	}
+
 	return status;
 }
 
@@ -491,18 +577,20 @@ OnSelfManagedIoInit(
 	PMAXM_CONTEXT pDevice = GetDeviceContext(FxDevice);
 	NTSTATUS status = STATUS_SUCCESS;
 
+	// Intel SST Callback
+
 	UNICODE_STRING IntcAudioSSTMultiHwCodecAPI;
 	RtlInitUnicodeString(&IntcAudioSSTMultiHwCodecAPI, L"\\CallBack\\IntcAudioSSTMultiHwCodecAPI");
 
 
-	OBJECT_ATTRIBUTES attributes;
-	InitializeObjectAttributes(&attributes,
+	OBJECT_ATTRIBUTES SSTAttributes;
+	InitializeObjectAttributes(&SSTAttributes,
 		&IntcAudioSSTMultiHwCodecAPI,
 		OBJ_KERNEL_HANDLE | OBJ_OPENIF | OBJ_CASE_INSENSITIVE | OBJ_PERMANENT,
 		NULL,
 		NULL
 	);
-	status = ExCreateCallback(&pDevice->IntcSSTHwMultiCodecCallback, &attributes, TRUE, TRUE);
+	status = ExCreateCallback(&pDevice->IntcSSTHwMultiCodecCallback, &SSTAttributes, TRUE, TRUE);
 	if (!NT_SUCCESS(status)) {
 
 		return status;
@@ -518,6 +606,41 @@ OnSelfManagedIoInit(
 	}
 
 	UpdateIntcSSTStatus(pDevice, 0);
+
+	// CS Audio Callback
+
+	UNICODE_STRING CSAudioCallbackAPI;
+	RtlInitUnicodeString(&CSAudioCallbackAPI, L"\\CallBack\\CsAudioCallbackAPI");
+
+
+	OBJECT_ATTRIBUTES attributes;
+	InitializeObjectAttributes(&attributes,
+		&CSAudioCallbackAPI,
+		OBJ_KERNEL_HANDLE | OBJ_OPENIF | OBJ_CASE_INSENSITIVE | OBJ_PERMANENT,
+		NULL,
+		NULL
+	);
+	status = ExCreateCallback(&pDevice->CSAudioAPICallback, &attributes, TRUE, TRUE);
+	if (!NT_SUCCESS(status)) {
+
+		return status;
+	}
+
+	pDevice->CSAudioAPICallbackObj = ExRegisterCallback(pDevice->CSAudioAPICallback,
+		CsAudioCallbackFunction,
+		pDevice->CSAudioWorkItem
+	);
+	if (!pDevice->CSAudioAPICallbackObj) {
+
+		return STATUS_NO_CALLBACK_ACTIVE;
+	}
+
+	CsAudioArg arg;
+	RtlZeroMemory(&arg, sizeof(CsAudioArg));
+	arg.argSz = sizeof(CsAudioArg);
+	arg.endpointType = CSAudioEndpointTypeSpeaker;
+	arg.endpointRequest = CSAudioEndpointRegister;
+	ExNotifyCallback(pDevice->CSAudioAPICallback, &arg, &CsAudioArg2);
 
 	return status;
 }
@@ -549,13 +672,15 @@ Status
 	PMAXM_CONTEXT pDevice = GetDeviceContext(FxDevice);
 	NTSTATUS status = STATUS_SUCCESS;
 
-	unsigned char gpio_data;
-	gpio_data = 1;
-	status =  GpioWriteDataSynchronously(&pDevice->SdmodeGpioContext, &gpio_data);
-	if (!NT_SUCCESS(status)) {
-		return status;
+	if (!pDevice->CSAudioManaged) {
+		unsigned char gpio_data;
+		gpio_data = 1;
+		status = GpioWriteDataSynchronously(&pDevice->SdmodeGpioContext, &gpio_data);
+		if (!NT_SUCCESS(status)) {
+			return status;
+		}
+		pDevice->DevicePoweredOn = TRUE;
 	}
-	pDevice->DevicePoweredOn = TRUE;
 
 	return status;
 }
@@ -587,13 +712,15 @@ Status
 	PMAXM_CONTEXT pDevice = GetDeviceContext(FxDevice);
 	NTSTATUS status = STATUS_SUCCESS;
 
-	unsigned char gpio_data;
-	gpio_data = 0;
-	status = GpioWriteDataSynchronously(&pDevice->SdmodeGpioContext, &gpio_data);
-	if (!NT_SUCCESS(status)) {
-		return status;
+	if (!pDevice->CSAudioManaged) {
+		unsigned char gpio_data;
+		gpio_data = 0;
+		status = GpioWriteDataSynchronously(&pDevice->SdmodeGpioContext, &gpio_data);
+		if (!NT_SUCCESS(status)) {
+			return status;
+		}
+		pDevice->DevicePoweredOn = FALSE;
 	}
-	pDevice->DevicePoweredOn = FALSE;
 
 	return STATUS_SUCCESS;
 }
@@ -696,6 +823,7 @@ IN PWDFDEVICE_INIT DeviceInit
 	}
 
 	devContext->FxDevice = device;
+	devContext->CSAudioManaged = FALSE;
 
 	return status;
 }
