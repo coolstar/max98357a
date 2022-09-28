@@ -371,7 +371,14 @@ CsAudioCallbackFunction(
 	RtlZeroMemory(&localArg, sizeof(CsAudioArg));
 	RtlCopyMemory(&localArg, arg, min(arg->argSz, sizeof(CsAudioArg)));
 
-	if (localArg.endpointType != CSAudioEndpointTypeSpeaker) {
+	if (localArg.endpointType == CSAudioEndpointTypeDSP && localArg.endpointRequest == CSAudioEndpointRegister) {
+		CsAudioArg arg;
+		RtlZeroMemory(&arg, sizeof(CsAudioArg));
+		arg.argSz = sizeof(CsAudioArg);
+		arg.endpointType = CSAudioEndpointTypeSpeaker;
+		arg.endpointRequest = CSAudioEndpointRegister;
+		ExNotifyCallback(pDevice->CSAudioAPICallback, &arg, &CsAudioArg2);
+	} else if (localArg.endpointType != CSAudioEndpointTypeSpeaker) {
 		return;
 	}
 
