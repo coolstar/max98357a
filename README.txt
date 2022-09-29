@@ -1,3 +1,7 @@
-WIP MAX98357A Amp driver for Windows
+MAX98357A Amp driver for Windows
 
-Note: This driver is only compatible with Skylake / Kabylake / Kaby-Lake-R as this uses "IntcAudioSSTMultiHwCodecAPI" which seems like it was special made for the Pixelbook to talk to Intel SST...
+Requires either Intel SST or CoolStar Audio
+
+Tested on Skylake, Kaby Lake, Kaby-Lake-R and Ryzen
+
+SST Note: This driver is only partially compatible with Skylake / Kabylake / Kaby-Lake-R as this uses "IntcAudioSSTMultiHwCodecAPI" which seems like it was special made for the Pixelbook to talk to Intel SST...
