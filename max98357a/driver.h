@@ -87,13 +87,25 @@ typedef enum {
 typedef enum {
 	CSAudioEndpointRegister,
 	CSAudioEndpointStart,
-	CSAudioEndpointStop
+	CSAudioEndpointStop,
+	CSAudioEndpointOverrideFormat
 } CSAudioEndpointRequest;
+
+typedef struct CSAUDIOFORMATOVERRIDE {
+	UINT16 channels;
+	UINT16 frequency;
+	UINT16 bitsPerSample;
+	UINT16 validBitsPerSample;
+	BOOL force32BitOutputContainer;
+} CsAudioFormatOverride;
 
 typedef struct CSAUDIOARG {
 	UINT32 argSz;
 	CSAudioEndpointType endpointType;
 	CSAudioEndpointRequest endpointRequest;
+	union {
+		CsAudioFormatOverride formatOverride;
+	};
 } CsAudioArg, * PCsAudioArg;
 
 typedef struct _MAXM_CONTEXT

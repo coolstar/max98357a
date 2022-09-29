@@ -350,6 +350,27 @@ CsAudioWorkItemFunc(
 }
 
 VOID
+CSAudioRegisterEndpoint(
+	PMAXM_CONTEXT pDevice
+) {
+	CsAudioArg arg;
+	RtlZeroMemory(&arg, sizeof(CsAudioArg));
+	arg.argSz = sizeof(CsAudioArg);
+	arg.endpointType = CSAudioEndpointTypeSpeaker;
+	arg.endpointRequest = CSAudioEndpointRegister;
+	ExNotifyCallback(pDevice->CSAudioAPICallback, &arg, &CsAudioArg2);
+
+	RtlZeroMemory(&arg, sizeof(CsAudioArg));
+	arg.argSz = sizeof(CsAudioArg);
+	arg.endpointType = CSAudioEndpointTypeSpeaker;
+	arg.endpointRequest = CSAudioEndpointOverrideFormat;
+	arg.formatOverride.bitsPerSample = 16;
+	arg.formatOverride.validBitsPerSample = 16;
+	arg.formatOverride.force32BitOutputContainer = TRUE;
+	ExNotifyCallback(pDevice->CSAudioAPICallback, &arg, &CsAudioArg2);
+}
+
+VOID
 CsAudioCallbackFunction(
 	IN WDFWORKITEM  WorkItem,
 	CsAudioArg* arg,
@@ -372,12 +393,7 @@ CsAudioCallbackFunction(
 	RtlCopyMemory(&localArg, arg, min(arg->argSz, sizeof(CsAudioArg)));
 
 	if (localArg.endpointType == CSAudioEndpointTypeDSP && localArg.endpointRequest == CSAudioEndpointRegister) {
-		CsAudioArg arg;
-		RtlZeroMemory(&arg, sizeof(CsAudioArg));
-		arg.argSz = sizeof(CsAudioArg);
-		arg.endpointType = CSAudioEndpointTypeSpeaker;
-		arg.endpointRequest = CSAudioEndpointRegister;
-		ExNotifyCallback(pDevice->CSAudioAPICallback, &arg, &CsAudioArg2);
+		CSAudioRegisterEndpoint(pDevice);
 	} else if (localArg.endpointType != CSAudioEndpointTypeSpeaker) {
 		return;
 	}
@@ -642,12 +658,7 @@ OnSelfManagedIoInit(
 		return STATUS_NO_CALLBACK_ACTIVE;
 	}
 
-	CsAudioArg arg;
-	RtlZeroMemory(&arg, sizeof(CsAudioArg));
-	arg.argSz = sizeof(CsAudioArg);
-	arg.endpointType = CSAudioEndpointTypeSpeaker;
-	arg.endpointRequest = CSAudioEndpointRegister;
-	ExNotifyCallback(pDevice->CSAudioAPICallback, &arg, &CsAudioArg2);
+	CSAudioRegisterEndpoint(pDevice);
 
 	return status;
 }
