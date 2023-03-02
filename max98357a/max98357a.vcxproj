@@ -87,7 +87,7 @@
       <TreatWarningAsError>false</TreatWarningAsError>
     </ClCompile>
     <Inf>
-      <TimeStamp>1.0.1</TimeStamp>
+      <TimeStamp>1.0.2</TimeStamp>
     </Inf>
     <DriverSign>
       <FileDigestAlgorithm>SHA256</FileDigestAlgorithm>
@@ -101,7 +101,7 @@
       <TreatWarningAsError>false</TreatWarningAsError>
     </ClCompile>
     <Inf>
-      <TimeStamp>1.0.1</TimeStamp>
+      <TimeStamp>1.0.2</TimeStamp>
     </Inf>
     <DriverSign>
       <FileDigestAlgorithm>SHA256</FileDigestAlgorithm>
@@ -115,7 +115,7 @@
       <TreatWarningAsError>false</TreatWarningAsError>
     </ClCompile>
     <Inf>
-      <TimeStamp>1.0.1</TimeStamp>
+      <TimeStamp>1.0.2</TimeStamp>
     </Inf>
     <DriverSign>
       <FileDigestAlgorithm>SHA256</FileDigestAlgorithm>
@@ -129,7 +129,7 @@
       <TreatWarningAsError>false</TreatWarningAsError>
     </ClCompile>
     <Inf>
-      <TimeStamp>1.0.1</TimeStamp>
+      <TimeStamp>1.0.2</TimeStamp>
     </Inf>
     <DriverSign>
       <FileDigestAlgorithm>SHA256</FileDigestAlgorithm>
@@ -145,11 +145,15 @@
   <ItemGroup>
     <ClInclude Include="driver.h" />
     <ClInclude Include="gpiowrapper.h" />
+    <ClInclude Include="resource.h" />
     <ClInclude Include="trace.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="gpio.c" />
     <ClCompile Include="max98357a.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="max98357a.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
