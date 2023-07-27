@@ -14,17 +14,17 @@ Abstract:
 
 #define VER_FILETYPE                VFT_DRV
 #define VER_FILESUBTYPE             VFT2_DRV_SOUND
-#define VER_FILEDESCRIPTION_STR     "Maxim 98357a/98360a Amplifier"
+#define VER_FILEDESCRIPTION_STR     "Maxim 98357a/98360a or Realtek ALC1015P/ALC1019P Amplifier"
 #define VER_INTERNALNAME_STR        "max98357a.sys"
 #define VER_ORIGINALFILENAME_STR    "max98357a.sys"
 
 #define VER_LEGALCOPYRIGHT_YEARS    "2023"
 #define VER_LEGALCOPYRIGHT_STR	    "Copyright (C) " VER_LEGALCOPYRIGHT_YEARS " CoolStar."
 
-#define VER_FILEVERSION 1,0,2,0
-#define VER_PRODUCTVERSION_STR "1.0.2.0"
-#define VER_PRODUCTVERSION 1,0,1,0
-#define LVER_PRODUCTVERSION_STR L"1.0.2.0"
+#define VER_FILEVERSION 1,0,3,0
+#define VER_PRODUCTVERSION_STR "1.0.3.0"
+#define VER_PRODUCTVERSION 1,0,3,0
+#define LVER_PRODUCTVERSION_STR L"1.0.3.0"
 
 #define VER_FILEFLAGSMASK		(VS_FF_DEBUG | VS_FF_PRERELEASE)
 #ifdef DEBUG
@@ -36,6 +36,6 @@ Abstract:
 #define VER_FILEOS				VOS_NT_WINDOWS32
 
 #define VER_COMPANYNAME_STR         "CoolStar"
-#define VER_PRODUCTNAME_STR         "Maxim 98357a/98360a Amplifier"
+#define VER_PRODUCTNAME_STR         "Maxim 98357a/98360a or Realtek ALC1015P/ALC1019P Amplifier"
 
 #include "common.ver"
