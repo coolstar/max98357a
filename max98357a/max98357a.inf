@@ -49,6 +49,10 @@ max98357a.sys  = 1,,
 [MAX98357A_Device.NT]
 CopyFiles=Drivers_Dir
 
+[MAX98357A_Device.NT.HW]
+Include=pci.inf
+Needs=PciD3ColdSupported.HW
+
 [Drivers_Dir]
 max98357a.sys
 

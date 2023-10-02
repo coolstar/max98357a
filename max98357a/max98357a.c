@@ -64,6 +64,8 @@ CsAudioWorkItemFunc(
 	if (NT_SUCCESS(GpioWriteDataSynchronously(&pDevice->SdmodeGpioContext, &gpio_data))) {
 		pDevice->DevicePoweredOn = TRUE;
 	}
+
+	WdfDeviceStopIdle(pDevice->FxDevice, TRUE);
 }
 
 VOID
@@ -116,14 +118,23 @@ CsAudioCallbackFunction(
 	}
 
 	if (localArg.endpointRequest == CSAudioEndpointStop || localArg.endpointRequest == CSAudioEndpointStart) {
-		unsigned char gpio_data;
-		gpio_data = 0;
-		if (NT_SUCCESS(GpioWriteDataSynchronously(&pDevice->SdmodeGpioContext, &gpio_data))) {
-			pDevice->DevicePoweredOn = FALSE;
+		if (pDevice->CSAudioRequestsOn) {
+			WdfDeviceResumeIdle(pDevice->FxDevice);
+
+			unsigned char gpio_data;
+			gpio_data = 0;
+			if (NT_SUCCESS(GpioWriteDataSynchronously(&pDevice->SdmodeGpioContext, &gpio_data))) {
+				pDevice->DevicePoweredOn = FALSE;
+			}
+
+			pDevice->CSAudioRequestsOn = FALSE;
 		}
 	}
 	if (localArg.endpointRequest == CSAudioEndpointStart) {
-		WdfWorkItemEnqueue(pDevice->CSAudioWorkItem);
+		if (!pDevice->CSAudioRequestsOn) {
+			pDevice->CSAudioRequestsOn = TRUE;
+			WdfWorkItemEnqueue(pDevice->CSAudioWorkItem);
+		}
 	}
 }
 
@@ -489,7 +500,7 @@ IN PWDFDEVICE_INIT DeviceInit
 
 	WDF_IO_QUEUE_CONFIG_INIT(&queueConfig, WdfIoQueueDispatchManual);
 
-	queueConfig.PowerManaged = WdfFalse;
+	queueConfig.PowerManaged = WdfTrue;
 
 	status = WdfIoQueueCreate(device,
 		&queueConfig,
@@ -504,6 +515,16 @@ IN PWDFDEVICE_INIT DeviceInit
 
 		return status;
 	}
+
+	WDF_DEVICE_POWER_POLICY_IDLE_SETTINGS IdleSettings;
+
+	WDF_DEVICE_POWER_POLICY_IDLE_SETTINGS_INIT(&IdleSettings, IdleCannotWakeFromS0);
+	IdleSettings.IdleTimeoutType = SystemManagedIdleTimeoutWithHint;
+	IdleSettings.IdleTimeout = 1000;
+	IdleSettings.Enabled = WdfTrue;
+
+	WdfDeviceAssignS0IdleSettings(devContext->FxDevice, &IdleSettings);
+
 
 	devContext->FxDevice = device;
 	devContext->CSAudioManaged = FALSE;
