@@ -1,7 +1,5 @@
-MAX98357A Amp driver for Windows
+MAX98357A / MAX98360A / RT1015P / RT1019P Amp driver for Windows
 
-Requires either Intel SST or CoolStar Audio
+Requires CoolStar Audio
 
-Tested on Skylake, Kaby Lake, Kaby-Lake-R and Ryzen
-
-SST Note: This driver is only partially compatible with Skylake / Kabylake / Kaby-Lake-R as this uses "IntcAudioSSTMultiHwCodecAPI" which seems like it was special made for the Pixelbook to talk to Intel SST...
+Tested on Skylake, Kaby Lake, Kaby-Lake-R, Alder Lake, Ryzen, etc.

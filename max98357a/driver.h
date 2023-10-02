@@ -17,9 +17,6 @@
 #include <stdint.h>
 #include "gpiowrapper.h"
 
-#define JACKDESC_RGB(r, g, b) \
-    ((COLORREF)((r << 16) | (g << 8) | (b)))
-
 //
 // String definitions
 //
@@ -33,48 +30,6 @@
 
 #define true 1
 #define false 0
-
-typedef struct _FAST_GPIO {
-	PVOID REGS;
-	UINT32 DW0;
-} FAST_GPIO;
-
-#pragma pack(push,1)
-typedef struct _IntcSSTArg
-{
-	int32_t chipModel;
-	int32_t sstQuery;
-	int32_t caller;
-	int32_t querySize;
-
-#ifdef __GNUC__
-	char EndOfHeader[0];
-#endif
-
-	uint8_t deviceInD0;
-#ifdef __GNUC__
-	char EndOfPowerCfg[0];
-#endif
-
-	int32_t dword11;
-	GUID guid;
-
-#ifdef __GNUC__
-	char EndOfGUID[0];
-#endif
-	uint8_t byte25;
-	int32_t dword26;
-	int32_t dword2A;
-	int32_t dword2E;
-	int32_t dword32;
-	int32_t dword36;
-	int32_t dword3A;
-	int32_t dword3E;
-	uint8_t byte42;
-	uint8_t byte43;
-	char padding[90]; //idk what this is for
-}  IntcSSTArg, * PIntcSSTArg;
-#pragma pack(pop)
 
 typedef enum {
 	CSAudioEndpointTypeDSP,
@@ -122,19 +77,12 @@ typedef struct _MAXM_CONTEXT
 	GPIO_CONTEXT SdmodeGpioContext;
 
 	BOOLEAN DevicePoweredOn;
-	INT8 IntcSSTStatus;
-
-	WDFWORKITEM IntcSSTWorkItem;
-	PCALLBACK_OBJECT IntcSSTHwMultiCodecCallback;
-	PVOID IntcSSTCallbackObj;
 
 	WDFWORKITEM CSAudioWorkItem;
 	PCALLBACK_OBJECT CSAudioAPICallback;
 	PVOID CSAudioAPICallbackObj;
 
 	BOOL CSAudioManaged;
-
-	IntcSSTArg sstArgTemp;
 
 } MAXM_CONTEXT, *PMAXM_CONTEXT;
 
