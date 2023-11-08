@@ -105,8 +105,6 @@ CsAudioCallbackFunction(
 		return;
 	}
 
-	pDevice->CSAudioManaged = TRUE;
-
 	CsAudioArg localArg;
 	RtlZeroMemory(&localArg, sizeof(CsAudioArg));
 	RtlCopyMemory(&localArg, arg, min(arg->argSz, sizeof(CsAudioArg)));
@@ -358,15 +356,13 @@ Status
 	PMAXM_CONTEXT pDevice = GetDeviceContext(FxDevice);
 	NTSTATUS status = STATUS_SUCCESS;
 
-	if (!pDevice->CSAudioManaged) {
-		unsigned char gpio_data;
-		gpio_data = 1;
-		status = GpioWriteDataSynchronously(&pDevice->SdmodeGpioContext, &gpio_data);
-		if (!NT_SUCCESS(status)) {
-			return status;
-		}
-		pDevice->DevicePoweredOn = TRUE;
+	unsigned char gpio_data;
+	gpio_data = 1;
+	status = GpioWriteDataSynchronously(&pDevice->SdmodeGpioContext, &gpio_data);
+	if (!NT_SUCCESS(status)) {
+		return status;
 	}
+	pDevice->DevicePoweredOn = TRUE;
 
 	return status;
 }
@@ -398,15 +394,13 @@ Status
 	PMAXM_CONTEXT pDevice = GetDeviceContext(FxDevice);
 	NTSTATUS status = STATUS_SUCCESS;
 
-	if (!pDevice->CSAudioManaged) {
-		unsigned char gpio_data;
-		gpio_data = 0;
-		status = GpioWriteDataSynchronously(&pDevice->SdmodeGpioContext, &gpio_data);
-		if (!NT_SUCCESS(status)) {
-			return status;
-		}
-		pDevice->DevicePoweredOn = FALSE;
+	unsigned char gpio_data;
+	gpio_data = 0;
+	status = GpioWriteDataSynchronously(&pDevice->SdmodeGpioContext, &gpio_data);
+	if (!NT_SUCCESS(status)) {
+		return status;
 	}
+	pDevice->DevicePoweredOn = FALSE;
 
 	return STATUS_SUCCESS;
 }
@@ -516,6 +510,8 @@ IN PWDFDEVICE_INIT DeviceInit
 		return status;
 	}
 
+	devContext->FxDevice = device;
+
 	WDF_DEVICE_POWER_POLICY_IDLE_SETTINGS IdleSettings;
 
 	WDF_DEVICE_POWER_POLICY_IDLE_SETTINGS_INIT(&IdleSettings, IdleCannotWakeFromS0);
@@ -524,10 +520,6 @@ IN PWDFDEVICE_INIT DeviceInit
 	IdleSettings.Enabled = WdfTrue;
 
 	WdfDeviceAssignS0IdleSettings(devContext->FxDevice, &IdleSettings);
-
-
-	devContext->FxDevice = device;
-	devContext->CSAudioManaged = FALSE;
 
 	return status;
 }
